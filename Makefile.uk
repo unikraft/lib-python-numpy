@@ -235,7 +235,8 @@ LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npysort/selection.cpp
 LIBPYTHON_NUMPY_SIMD_QSORT_16BIT.DISPATCH.AVX512_ICL_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS) -mavx512vnni -mavx512ifma -mavx512vbmi -mavx512vbmi2 -mavx512bitalg -mavx512vpopcntdq
 LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/npysort/simd_qsort_16bit.dispatch.avx512_icl.cpp
 LIBPYTHON_NUMPY_SIMD_QSORT_16BIT.DISPATCH.AVX512_SPR_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS) -mavx512vnni -mavx512ifma -mavx512vbmi -mavx512vbmi2 -mavx512bitalg -mavx512vpopcntdq -mavx512fp16
-LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/npysort/simd_qsort_16bit.dispatch.avx512_spr.cpp
+LIBPYTHON_NUMPY_SRCS-$(call gcc_version_ge,12,0) += $(LIBPYTHON_NUMPY_BSRC)/core/src/npysort/simd_qsort_16bit.dispatch.avx512_spr.cpp
+LIBPYTHON_NUMPY_SRCS-$(call clang_version_ge,14,0) += $(LIBPYTHON_NUMPY_BSRC)/core/src/npysort/simd_qsort_16bit.dispatch.avx512_spr.cpp
 LIBPYTHON_NUMPY_SIMD_QSORT.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
 LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/npysort/simd_qsort.dispatch.avx512_skx.cpp
 
