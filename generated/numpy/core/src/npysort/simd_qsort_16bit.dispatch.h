@@ -10,6 +10,12 @@
 #undef NPY__CPU_DISPATCH_CALL
 #define NPY__CPU_DISPATCH_BASELINE_CALL(CB, ...) \
 
+/* Unikraft: account for compiler support of CPU features */
+#if (__GNUC__ >= 12 || __clang_major__ >= 14)
 #define NPY__CPU_DISPATCH_CALL(CHK, CB, ...) \
 	NPY__CPU_DISPATCH_EXPAND_(CB((CHK(AVX512_SPR)), AVX512_SPR, __VA_ARGS__)) \
 	NPY__CPU_DISPATCH_EXPAND_(CB((CHK(AVX512_ICL)), AVX512_ICL, __VA_ARGS__))
+#else
+#define NPY__CPU_DISPATCH_CALL(CHK, CB, ...) \
+	NPY__CPU_DISPATCH_EXPAND_(CB((CHK(AVX512_ICL)), AVX512_ICL, __VA_ARGS__))
+#endif
