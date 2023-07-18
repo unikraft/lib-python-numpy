@@ -1,0 +1,38 @@
+From a44f611caaf1a14f521698bf69f7652b039e118a Mon Sep 17 00:00:00 2001
+From: Andrei Tatar <andrei@unikraft.io>
+Date: Thu, 13 Jul 2023 13:55:28 +0200
+Subject: [PATCH 2/3] Break circular dependency in cythonized package
+
+The cythonized package numpy.random presents a circular dependency on
+import when used with unikraft's importfix files.
+This change breaks the cycle by providing the necessary cimports
+directly from the flattened built-in module.
+
+Signed-off-by: Andrei Tatar <andrei@unikraft.io>
+---
+ numpy/random/__init__.pxd                   | 2 +-
+ numpy/random/numpy_random_bit_generator.pxd | 1 +
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+ create mode 120000 numpy/random/numpy_random_bit_generator.pxd
+
+diff --git a/numpy/random/__init__.pxd b/numpy/random/__init__.pxd
+index 1f9057296..00263590c 100644
+--- a/numpy/random/__init__.pxd
++++ b/numpy/random/__init__.pxd
+@@ -11,4 +11,4 @@
+ 
+     ctypedef bitgen bitgen_t
+ 
+-from numpy.random.bit_generator cimport BitGenerator, SeedSequence
++from numpy_random_bit_generator cimport BitGenerator, SeedSequence
+diff --git a/numpy/random/numpy_random_bit_generator.pxd b/numpy/random/numpy_random_bit_generator.pxd
+new file mode 120000
+index 000000000..6cb89968c
+--- /dev/null
++++ b/numpy/random/numpy_random_bit_generator.pxd
+@@ -0,0 +1 @@
++bit_generator.pxd
+\ No newline at end of file
+-- 
+2.41.0
+
