@@ -1,0 +1,16 @@
+menuconfig LIBPYTHON_NUMPY
+    bool "NumPy - fundamental package for scientific computing with Python"
+    default n
+    select LIBPYTHON3
+    select LIBCXX
+    select LIBMUSL_COMPLEX if LIBMUSL
+    select LIBINTEL_INTRINSICS if ARCH_X86_64
+
+
+if LIBPYTHON_NUMPY
+    config LIBPYTHON_NUMPY_OPENBLAS
+    bool "Use the OpenBLAS library"
+    default y
+    depends on LIBOPENBLAS
+
+endif

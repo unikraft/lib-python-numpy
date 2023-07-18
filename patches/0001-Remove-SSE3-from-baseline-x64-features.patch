@@ -1,0 +1,30 @@
+From 3696f41e73467270be805cf83531fdba78d186d0 Mon Sep 17 00:00:00 2001
+From: Andrei Tatar <andrei@unikraft.io>
+Date: Thu, 6 Jul 2023 20:00:34 +0300
+Subject: [PATCH 3/3] Remove SSE3 from baseline x64 features
+
+x86_64 architecturally mandates SSE & SSE2, however SSE3 is technically
+optional, and correctly compiled code for generic x86_64 cannot rely on
+it.
+
+Signed-off-by: Andrei Tatar <andrei@unikraft.io>
+---
+ numpy/distutils/ccompiler_opt.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/numpy/distutils/ccompiler_opt.py b/numpy/distutils/ccompiler_opt.py
+index 1e9de3c45..ff4b42d34 100644
+--- a/numpy/distutils/ccompiler_opt.py
++++ b/numpy/distutils/ccompiler_opt.py
+@@ -229,7 +229,7 @@ class _Config:
+     )
+     conf_min_features = dict(
+         x86 = "SSE SSE2",
+-        x64 = "SSE SSE2 SSE3",
++        x64 = "SSE SSE2",
+         ppc64 = '', # play it safe
+         ppc64le = "VSX VSX2",
+         s390x = '',
+-- 
+2.41.0
+

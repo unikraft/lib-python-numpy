@@ -1,0 +1,430 @@
+#  numpy Makefile.uk
+#
+#  Authors: Andrei Tatar <andrei@unikraft.io>
+#
+#  Copyright (c) 2023, Unikraft GmbH and The Unikraft Authors.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions
+#  are met:
+#
+#  1. Redistributions of source code must retain the above copyright
+#     notice, this list of conditions and the following disclaimer.
+#  2. Redistributions in binary form must reproduce the above copyright
+#     notice, this list of conditions and the following disclaimer in the
+#     documentation and/or other materials provided with the distribution.
+#  3. Neither the name of the copyright holder nor the names of its
+#     contributors may be used to endorse or promote products derived from
+#     this software without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+
+################################################################################
+# Library registration
+################################################################################
+$(eval $(call addlib_s,libpython_numpy,$(CONFIG_LIBPYTHON_NUMPY)))
+
+################################################################################
+# Sources
+################################################################################
+LIBPYTHON_NUMPY_VERSION=1.25.0
+LIBPYTHON_NUMPY_URL=https://github.com/numpy/numpy/releases/download/v$(LIBPYTHON_NUMPY_VERSION)/numpy-$(LIBPYTHON_NUMPY_VERSION).tar.gz
+LIBPYTHON_NUMPY_DIRNAME=numpy-$(LIBPYTHON_NUMPY_VERSION)
+LIBPYTHON_NUMPY_PATCHDIR=$(LIBPYTHON_NUMPY_BASE)/patches
+$(eval $(call fetch,libpython_numpy,$(LIBPYTHON_NUMPY_URL)))
+$(eval $(call patch,libpython_numpy,$(LIBPYTHON_NUMPY_PATCHDIR),$(LIBPYTHON_NUMPY_DIRNAME)))
+
+################################################################################
+# Helpers
+################################################################################
+LIBPYTHON_NUMPY_SRC = $(LIBPYTHON_NUMPY_ORIGIN)/$(LIBPYTHON_NUMPY_DIRNAME)/numpy
+LIBPYTHON_NUMPY_BSRC = $(LIBPYTHON_NUMPY_BASE)/generated/numpy
+
+################################################################################
+# Library includes
+################################################################################
+# API
+CINCLUDES-$(CONFIG_LIBPYTHON_NUMPY) += -I$(LIBPYTHON_NUMPY_SRC)/core/include
+CXXINCLUDES-$(CONFIG_LIBPYTHON_NUMPY) += -I$(LIBPYTHON_NUMPY_SRC)/core/include
+
+# Internal
+LIBPYTHON_NUMPY__INCLUDES += core
+LIBPYTHON_NUMPY__INCLUDES += core/include
+LIBPYTHON_NUMPY__INCLUDES += core/include/numpy
+LIBPYTHON_NUMPY__INCLUDES += core/src
+LIBPYTHON_NUMPY__INCLUDES += core/src/common
+LIBPYTHON_NUMPY__INCLUDES += core/src/multiarray
+LIBPYTHON_NUMPY__INCLUDES += core/src/npymath
+LIBPYTHON_NUMPY__INCLUDES += core/src/npysort
+LIBPYTHON_NUMPY__INCLUDES += core/src/_simd
+LIBPYTHON_NUMPY__INCLUDES += core/src/umath
+LIBPYTHON_NUMPY__INCLUDES += random
+
+LIBPYTHON_NUMPY_COMMON_INCLUDES += $(addprefix -I$(LIBPYTHON_NUMPY_BSRC)/,$(LIBPYTHON_NUMPY__INCLUDES))
+LIBPYTHON_NUMPY_COMMON_INCLUDES += -I$(LIBPYTHON_NUMPY_BSRC)/distutils/include
+LIBPYTHON_NUMPY_COMMON_INCLUDES += $(addprefix -I$(LIBPYTHON_NUMPY_SRC)/,$(LIBPYTHON_NUMPY__INCLUDES))
+
+LIBPYTHON_NUMPY_CINCLUDES += $(LIBPYTHON_NUMPY_COMMON_INCLUDES)
+LIBPYTHON_NUMPY_CXXINCLUDES += $(LIBPYTHON_NUMPY_COMMON_INCLUDES)
+
+
+################################################################################
+# Global flags
+################################################################################
+LIBPYTHON_NUMPY_FLAGS += -DDYNAMIC_ANNOTATIONS_ENABLED=1
+LIBPYTHON_NUMPY_FLAGS += -D_FILE_OFFSET_BITS=64
+LIBPYTHON_NUMPY_FLAGS += -D_GNU_SOURCE
+LIBPYTHON_NUMPY_FLAGS += -DHAVE_NPY_CONFIG_H=1
+LIBPYTHON_NUMPY_FLAGS += -D_LARGEFILE64_SOURCE=1
+LIBPYTHON_NUMPY_FLAGS += -D_LARGEFILE_SOURCE=1
+LIBPYTHON_NUMPY_FLAGS += -DNPY_INTERNAL_BUILD=1
+LIBPYTHON_NUMPY_FLAGS += -fasynchronous-unwind-tables
+LIBPYTHON_NUMPY_FLAGS += -fexceptions
+LIBPYTHON_NUMPY_FLAGS += -fwrapv
+LIBPYTHON_NUMPY_FLAGS += -Wall
+LIBPYTHON_NUMPY_FLAGS += -Werror=format-security
+LIBPYTHON_NUMPY_FLAGS += -Wp,-D_GLIBCXX_ASSERTIONS
+LIBPYTHON_NUMPY_FLAGS += -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3
+LIBPYTHON_NUMPY_FLAGS += -Wsign-compare
+
+LIBPYTHON_NUMPY_FLAGS += -Wno-missing-field-initializers
+LIBPYTHON_NUMPY_FLAGS-$(call have_gcc) += -Wno-cast-function-type -Wno-type-limits -Wno-implicit-fallthrough
+LIBPYTHON_NUMPY_FLAGS-$(call have_clang) += -Wno-documentation -Wno-documentation-unknown-command -Wno-shift-op-parentheses -Wno-bitwise-op-parentheses -Wno-unknown-attributes
+LIBPYTHON_NUMPY_FLAGS-$(call clang_version_ge,16,0) += -Wno-single-bit-bitfield-constant-conversion
+
+LIBPYTHON_NUMPY_CFLAGS += $(LIBPYTHON_NUMPY_FLAGS) $(LIBPYTHON_NUMPY_FLAGS-y)
+LIBPYTHON_NUMPY_CXXFLAGS += -std=c++17 $(LIBPYTHON_NUMPY_FLAGS) $(LIBPYTHON_NUMPY_FLAGS-y)
+
+LIBPYTHON_NUMPY__SSE41_FLAGS := -msse -msse2 -msse3 -mssse3 -msse4.1
+LIBPYTHON_NUMPY__SSE42_FLAGS := $(LIBPYTHON_NUMPY__SSE41_FLAGS) -mpopcnt -msse4.2
+LIBPYTHON_NUMPY__AVX2_FLAGS := $(LIBPYTHON_NUMPY__SSE42_FLAGS) -mavx -mf16c -mavx2
+LIBPYTHON_NUMPY__FMA3_AVX2_FLAGS := $(LIBPYTHON_NUMPY__AVX2_FLAGS) -mfma
+LIBPYTHON_NUMPY__AVX512F_FLAGS := $(LIBPYTHON_NUMPY__AVX2_FLAGS) -mavx512f -mno-mmx
+LIBPYTHON_NUMPY__AVX512_SKX_FLAGS := $(LIBPYTHON_NUMPY__AVX512F_FLAGS) -mavx512cd -mavx512vl -mavx512bw -mavx512dq
+
+################################################################################
+# Library sources
+################################################################################
+# These are taken from what setup.py builds and sorted in alphabetical order.
+# Please maintain this ordering when updating the library.
+################################################################################
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/common/array_assign.c
+LIBPYTHON_NUMPY_SRCS-$(CONFIG_LIBPYTHON_NUMPY_OPENBLAS) += $(LIBPYTHON_NUMPY_SRC)/core/src/common/cblasfuncs.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/common/mem_overlap.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/common/npy_argparse.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/common/npy_cpu_features.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/common/npy_hashtable.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/common/npy_longdouble.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/common/numpyos.c
+LIBPYTHON_NUMPY_SRCS-$(CONFIG_LIBPYTHON_NUMPY_OPENBLAS) += $(LIBPYTHON_NUMPY_SRC)/core/src/common/python_xerbla.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/common/ucsnarrow.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/common/ufunc_override.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/abstractdtypes.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/alloc.c
+
+LIBPYTHON_NUMPY_ARGFUNC.DISPATCH.AVX2_FLAGS += $(LIBPYTHON_NUMPY__AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/argfunc.dispatch.avx2.c
+LIBPYTHON_NUMPY_ARGFUNC.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/argfunc.dispatch.avx512_skx.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/argfunc.dispatch.c
+LIBPYTHON_NUMPY_ARGFUNC.DISPATCH.SSE42_FLAGS += $(LIBPYTHON_NUMPY__SSE42_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/argfunc.dispatch.sse42.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/array_assign_array.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/array_assign_scalar.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/array_coercion.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/arrayfunction_override.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/array_method.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/arrayobject.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/arraytypes.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/buffer.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/calculation.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/common.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/common_dtype.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/compiled_base.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/conversion_utils.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/convert.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/convert_datatype.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/ctors.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/datetime_busday.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/datetime_busdaycal.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/datetime.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/datetime_strings.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/descriptor.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/dlpack.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/dragon4.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/dtypemeta.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/dtype_transfer.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/dtype_traversal.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/einsum.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/einsum_sumprod.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/experimental_public_dtype_api.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/flagsobject.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/getset.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/hashdescr.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/item_selection.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/iterators.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/legacy_dtype_implementation.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/lowlevel_strided_loops.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/mapping.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/methods.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/multiarraymodule.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/_multiarray_tests.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/nditer_api.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/nditer_constr.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/nditer_pywrap.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/nditer_templ.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/number.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/refcount.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/scalarapi.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/multiarray/scalartypes.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/sequence.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/shape.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/strfuncs.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/temp_elide.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/textreading/conversions.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/textreading/field_types.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/textreading/growth.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/textreading/readtext.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/textreading/rows.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/textreading/stream_pyobject.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/textreading/str_to_int.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/textreading/tokenize.cpp
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/typeinfo.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/usertypes.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/multiarray/vdot.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npymath/arm64_exports.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npymath/halffloat.cpp
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/npymath/ieee754.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npymath/npy_math.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/npymath/npy_math_complex.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npysort/binsearch.cpp
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npysort/heapsort.cpp
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npysort/mergesort.cpp
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npysort/quicksort.cpp
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npysort/radixsort.cpp
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npysort/selection.cpp
+
+LIBPYTHON_NUMPY_SIMD_QSORT_16BIT.DISPATCH.AVX512_ICL_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS) -mavx512vnni -mavx512ifma -mavx512vbmi -mavx512vbmi2 -mavx512bitalg -mavx512vpopcntdq
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/npysort/simd_qsort_16bit.dispatch.avx512_icl.cpp
+LIBPYTHON_NUMPY_SIMD_QSORT_16BIT.DISPATCH.AVX512_SPR_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS) -mavx512vnni -mavx512ifma -mavx512vbmi -mavx512vbmi2 -mavx512bitalg -mavx512vpopcntdq -mavx512fp16
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/npysort/simd_qsort_16bit.dispatch.avx512_spr.cpp
+LIBPYTHON_NUMPY_SIMD_QSORT.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/npysort/simd_qsort.dispatch.avx512_skx.cpp
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/npysort/timsort.cpp
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/_simd/_simd.c
+
+LIBPYTHON_NUMPY__SIMD.DISPATCH.AVX512F_FLAGS += $(LIBPYTHON_NUMPY__AVX512F_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/_simd/_simd.dispatch.avx512f.c
+LIBPYTHON_NUMPY__SIMD.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/_simd/_simd.dispatch.avx512_skx.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/_simd/_simd.dispatch.c
+LIBPYTHON_NUMPY__SIMD.DISPATCH.FMA3.AVX2_FLAGS += $(LIBPYTHON_NUMPY__FMA3_AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/_simd/_simd.dispatch.fma3.avx2.c
+LIBPYTHON_NUMPY__SIMD.DISPATCH.SSE42_FLAGS += $(LIBPYTHON_NUMPY__SSE42_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/_simd/_simd.dispatch.sse42.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/clip.cpp
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/dispatching.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/extobj.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/legacy_array_method.c
+
+LIBPYTHON_NUMPY_LOOPS_ARITHMETIC.DISPATCH.AVX2_FLAGS += $(LIBPYTHON_NUMPY__AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_arithmetic.dispatch.avx2.c
+LIBPYTHON_NUMPY_LOOPS_ARITHMETIC.DISPATCH.AVX512F_FLAGS += $(LIBPYTHON_NUMPY__AVX512F_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_arithmetic.dispatch.avx512f.c
+LIBPYTHON_NUMPY_LOOPS_ARITHMETIC.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_arithmetic.dispatch.avx512_skx.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_arithmetic.dispatch.c
+LIBPYTHON_NUMPY_LOOPS_ARITHMETIC.DISPATCH.SSE41_FLAGS += $(LIBPYTHON_NUMPY__SSE41_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_arithmetic.dispatch.sse41.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_arithm_fp.dispatch.c
+LIBPYTHON_NUMPY_LOOPS_ARITHM_FP.DISPATCH.FMA3.AVX2_FLAGS += $(LIBPYTHON_NUMPY__FMA3_AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_arithm_fp.dispatch.fma3.avx2.c
+
+LIBPYTHON_NUMPY_LOOPS_AUTOVEC.DISPATCH.AVX2_FLAGS += $(LIBPYTHON_NUMPY__AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_autovec.dispatch.avx2.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_autovec.dispatch.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops.c
+
+LIBPYTHON_NUMPY_LOOPS_COMPARISON.DISPATCH.AVX2_FLAGS += $(LIBPYTHON_NUMPY__AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_comparison.dispatch.avx2.c
+LIBPYTHON_NUMPY_LOOPS_COMPARISON.DISPATCH.AVX512F_FLAGS += $(LIBPYTHON_NUMPY__AVX512F_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_comparison.dispatch.avx512f.c
+LIBPYTHON_NUMPY_LOOPS_COMPARISON.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_comparison.dispatch.avx512_skx.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_comparison.dispatch.c
+LIBPYTHON_NUMPY_LOOPS_COMPARISON.DISPATCH.SSE42_FLAGS += $(LIBPYTHON_NUMPY__SSE42_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_comparison.dispatch.sse42.c
+
+LIBPYTHON_NUMPY_LOOPS_EXPONENT_LOG.DISPATCH.AVX512F_FLAGS += $(LIBPYTHON_NUMPY__AVX512F_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_exponent_log.dispatch.avx512f.c
+LIBPYTHON_NUMPY_LOOPS_EXPONENT_LOG.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_exponent_log.dispatch.avx512_skx.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_exponent_log.dispatch.c
+LIBPYTHON_NUMPY_LOOPS_EXPONENT_LOG.DISPATCH.FMA3.AVX2_FLAGS += $(LIBPYTHON_NUMPY__FMA3_AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_exponent_log.dispatch.fma3.avx2.c
+
+LIBPYTHON_NUMPY_LOOPS_HYPERBOLIC.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_hyperbolic.dispatch.avx512_skx.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_hyperbolic.dispatch.c
+LIBPYTHON_NUMPY_LOOPS_HYPERBOLIC.DISPATCH.FMA3.AVX2_FLAGS += $(LIBPYTHON_NUMPY__FMA3_AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_hyperbolic.dispatch.fma3.avx2.c
+
+LIBPYTHON_NUMPY_LOOPS_LOGICAL.DISPATCH.AVX2_FLAGS += $(LIBPYTHON_NUMPY__AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_logical.dispatch.avx2.c
+LIBPYTHON_NUMPY_LOOPS_LOGICAL.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_logical.dispatch.avx512_skx.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_logical.dispatch.c
+
+LIBPYTHON_NUMPY_LOOPS_MINMAX.DISPATCH.AVX2_FLAGS += $(LIBPYTHON_NUMPY__AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_minmax.dispatch.avx2.c
+LIBPYTHON_NUMPY_LOOPS_MINMAX.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_minmax.dispatch.avx512_skx.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_minmax.dispatch.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_modulo.dispatch.c
+
+LIBPYTHON_NUMPY_LOOPS_TRIGONOMETRIC.DISPATCH.AVX512F_FLAGS += $(LIBPYTHON_NUMPY__AVX512F_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_trigonometric.dispatch.avx512f.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_trigonometric.dispatch.c
+LIBPYTHON_NUMPY_LOOPS_TRIGONOMETRIC.DISPATCH.FMA3.AVX2_FLAGS += $(LIBPYTHON_NUMPY__FMA3_AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_trigonometric.dispatch.fma3.avx2.c
+
+LIBPYTHON_NUMPY_LOOPS_UMATH_FP.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_umath_fp.dispatch.avx512_skx.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_umath_fp.dispatch.c
+
+LIBPYTHON_NUMPY_LOOPS_UNARY_COMPLEX.DISPATCH.AVX512F_FLAGS += $(LIBPYTHON_NUMPY__AVX512F_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_unary_complex.dispatch.avx512f.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_unary_complex.dispatch.c
+LIBPYTHON_NUMPY_LOOPS_UNARY_COMPLEX.DISPATCH.FMA3.AVX2_FLAGS += $(LIBPYTHON_NUMPY__FMA3_AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_unary_complex.dispatch.fma3.avx2.c
+
+LIBPYTHON_NUMPY_LOOPS_UNARY.DISPATCH.AVX2_FLAGS += $(LIBPYTHON_NUMPY__AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_unary.dispatch.avx2.c
+LIBPYTHON_NUMPY_LOOPS_UNARY.DISPATCH.AVX512_SKX_FLAGS += $(LIBPYTHON_NUMPY__AVX512_SKX_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_unary.dispatch.avx512_skx.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_unary.dispatch.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_unary_fp.dispatch.c
+LIBPYTHON_NUMPY_LOOPS_UNARY_FP.DISPATCH.SSE41_FLAGS += $(LIBPYTHON_NUMPY__SSE41_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_unary_fp.dispatch.sse41.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_unary_fp_le.dispatch.c
+LIBPYTHON_NUMPY_LOOPS_UNARY_FP_LE.DISPATCH.SSE41_FLAGS += $(LIBPYTHON_NUMPY__SSE41_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/loops_unary_fp_le.dispatch.sse41.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/matmul.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/_operand_flag_tests.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/override.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/_rational_tests.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/reduction.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/scalarmath.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/_scaled_float_dtype.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/string_ufuncs.cpp
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/_struct_ufunc_tests.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/ufunc_object.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/ufunc_type_resolution.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/umathmodule.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/_umath_tests.c
+LIBPYTHON_NUMPY__UMATH_TESTS.DISPATCH.AVX2_FLAGS += $(LIBPYTHON_NUMPY__AVX2_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/_umath_tests.dispatch.avx2.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/_umath_tests.dispatch.c
+LIBPYTHON_NUMPY__UMATH_TESTS.DISPATCH.SSE41_FLAGS += $(LIBPYTHON_NUMPY__SSE41_FLAGS)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/core/src/umath/_umath_tests.dispatch.sse41.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/core/src/umath/wrapping_array_method.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/fft/_pocketfft.c
+
+ifneq ($(CONFIG_LIBPYTHON_NUMPY_OPENBLAS),y)
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/lapack_lite/f2c_blas.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/lapack_lite/f2c.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/lapack_lite/f2c_c_lapack.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/lapack_lite/f2c_config.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/lapack_lite/f2c_d_lapack.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/lapack_lite/f2c_lapack.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/lapack_lite/f2c_s_lapack.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/lapack_lite/f2c_z_lapack.c
+endif
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/lapack_litemodule.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/lapack_lite/python_xerbla.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/linalg/umath_linalg.cpp
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/random/bit_generator.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/random/_bounded_integers.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/random/_common.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/random/_generator.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/random/_mt19937.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/random/mtrand.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/random/_pcg64.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/random/_philox.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_BSRC)/random/_sfc64.c
+
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/distributions/distributions.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/distributions/logfactorial.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/distributions/random_hypergeometric.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/distributions/random_mvhg_count.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/distributions/random_mvhg_marginals.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/legacy/legacy-distributions.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/mt19937/mt19937.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/mt19937/mt19937-jump.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/pcg64/pcg64.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/philox/philox.c
+LIBPYTHON_NUMPY_SRCS-y += $(LIBPYTHON_NUMPY_SRC)/random/src/sfc64/sfc64.c
+
+################################################################################
+# Root filesystem
+################################################################################
+
+ifeq ($(CONFIG_LIBPYTHON_NUMPY),y)
+# Install numpy lib into main python rootfs & cleanup non-python files
+$(PYTHON_ROOTFS)/.numpy_done: $(PYTHON_ROOTFS)/.keep
+	. $(PYTHON_ROOTFS)/bin/activate && cd $(LIBPYTHON_NUMPY_SRC)/.. && pip install . --prefix=$(PYTHON_ROOTFS) --no-compile
+	_dir=`find "$(PYTHON_ROOTFS)" -maxdepth 4 -type d -name numpy`; \
+	find "$$_dir" -type f -name '*.so' -delete; \
+	find "$$_dir" -type d -name '__pycache__' | xargs rm -rf; \
+	find "$$_dir" -type f | grep -v '\.py$$' | tr "\n" "\0" | xargs -0 rm; \
+	find "$(LIBPYTHON_NUMPY_BASE)/importfix/numpy" -mindepth 1 -maxdepth 1 | xargs $(CP) -rp -t "$$_dir"; \
+	test `basename $$(dirname $$_dir) | cut -d. -f1,2` != $(LIBPYTHON3_VERSION) && \
+		mv "$$_dir" "$(PYTHON_ROOTFS)/lib/python$(LIBPYTHON3_VERSION)/numpy"
+	touch $@
+
+# Add numpy rootfs to main python
+python-rootfs: $(PYTHON_ROOTFS)/.numpy_done
+
+endif

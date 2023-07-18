@@ -1,0 +1,77 @@
+From bbbd167f184b17b2546029b14f9f6ec54ae1bc5d Mon Sep 17 00:00:00 2001
+From: Andrei Tatar <andrei@unikraft.io>
+Date: Thu, 13 Jul 2023 14:01:52 +0200
+Subject: [PATCH 3/3] Remove relative imports from cythonized sources
+
+Natively compiled modules can only be registered as a top-level flat
+namespace in unikraft's Python, meaning they don't have an enclosing
+package, thus breaking any relative imports used in the file.
+This fix makes all imports in cythonized files absolute.
+
+Signed-off-by: Andrei Tatar <andrei@unikraft.io>
+---
+ numpy/random/_generator.pyx    | 4 ++--
+ numpy/random/bit_generator.pyx | 2 +-
+ numpy/random/mtrand.pyx        | 4 ++--
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/numpy/random/_generator.pyx b/numpy/random/_generator.pyx
+index a30d116c2..00e4a824d 100644
+--- a/numpy/random/_generator.pyx
++++ b/numpy/random/_generator.pyx
+@@ -21,7 +21,7 @@
+ from ._bounded_integers cimport (_rand_bool, _rand_int32, _rand_int64,
+          _rand_int16, _rand_int8, _rand_uint64, _rand_uint32, _rand_uint16,
+          _rand_uint8, _gen_mask)
+-from ._pcg64 import PCG64
++from numpy.random._pcg64 import PCG64
+ from numpy.random cimport bitgen_t
+ from ._common cimport (POISSON_LAM_MAX, CONS_POSITIVE, CONS_NONE,
+             CONS_NON_NEGATIVE, CONS_BOUNDED_0_1, CONS_BOUNDED_GT_0_1,
+@@ -222,7 +222,7 @@ def __setstate__(self, state):
+     def __reduce__(self):
+         ctor, name_tpl, state = self._bit_generator.__reduce__()
+ 
+-        from ._pickle import __generator_ctor
++        from numpy.random._pickle import __generator_ctor
+         # Requirements of __generator_ctor are (name, ctor)
+         return __generator_ctor, (name_tpl[0], ctor), state
+ 
+diff --git a/numpy/random/bit_generator.pyx b/numpy/random/bit_generator.pyx
+index 83441747a..666485f25 100644
+--- a/numpy/random/bit_generator.pyx
++++ b/numpy/random/bit_generator.pyx
+@@ -541,7 +541,7 @@ def __setstate__(self, state):
+         self.state = state
+ 
+     def __reduce__(self):
+-        from ._pickle import __bit_generator_ctor
++        from numpy.random._pickle import __bit_generator_ctor
+         return __bit_generator_ctor, (self.state['bit_generator'],), self.state
+ 
+     @property
+diff --git a/numpy/random/mtrand.pyx b/numpy/random/mtrand.pyx
+index d14d08164..5a9e506f9 100644
+--- a/numpy/random/mtrand.pyx
++++ b/numpy/random/mtrand.pyx
+@@ -16,7 +16,7 @@
+ from ._bounded_integers cimport (_rand_bool, _rand_int32, _rand_int64,
+          _rand_int16, _rand_int8, _rand_uint64, _rand_uint32, _rand_uint16,
+          _rand_uint8,)
+-from ._mt19937 import MT19937 as _MT19937
++from numpy.random._mt19937 import MT19937 as _MT19937
+ from numpy.random cimport bitgen_t
+ from ._common cimport (POISSON_LAM_MAX, CONS_POSITIVE, CONS_NONE,
+             CONS_NON_NEGATIVE, CONS_BOUNDED_0_1, CONS_BOUNDED_GT_0_1,
+@@ -206,7 +206,7 @@ def __setstate__(self, state):
+     def __reduce__(self):
+         ctor, name_tpl, _ = self._bit_generator.__reduce__()
+ 
+-        from ._pickle import __randomstate_ctor
++        from numpy.random._pickle import __randomstate_ctor
+         return __randomstate_ctor, (name_tpl[0], ctor), self.get_state(legacy=False)
+ 
+     cdef _initialize_bit_generator(self, bit_generator):
+-- 
+2.41.0
+
